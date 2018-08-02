@@ -1,0 +1,18 @@
+{
+  "type":"application",
+  "targetPackage":"io.universalwatch.universalwatchapplication",
+  "application":"Official Notes",
+  "data":{
+    "usesEncryption":false,
+    "icon":"",
+    "reintall":false,
+    "package":"io.universalwatch.universalwatchapplication",
+    "name":"Official Notes",
+    "voicePhrases":[
+
+    ],
+    "requirements":[
+      "color"
+    ]
+  }
+}

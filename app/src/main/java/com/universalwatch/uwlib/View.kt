@@ -1,15 +1,15 @@
 package com.universalwatch.uwlib
 
+import android.content.Context
 import android.graphics.Color
 import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
-import kotlin.reflect.KClass
 
 /**
  * Created by emile on 14-Nov-17.
  */
-
+//TODO: onBack w fabrykach FromJson?
 data class ColorSet(
         var primary:Color,
         var secondary:Color,
@@ -26,16 +26,31 @@ data class ColorSet(
         return j
     }
 }
-open abstract class View(
+abstract class View(
         var name:String,
         private var datatype:String,
-        var actions:MutableList<Action> = mutableListOf()
+
+        var actions:MutableList<Action> = mutableListOf(),
+        onBack: (Context, String) -> Unit,
+        var template:JSONObject?=null
 ){
+    lateinit var systemCallbacks:SystemActions
+    var sideActionsAcive=false
+    init{
+        systemCallbacks = SystemActions()
+        systemCallbacks.onBack=onBack
+    }
     var colorSet:ColorSet?=null
+
     protected fun getBasicPropertiesAsMap():Map<String,String>{
-        return mapOf(name to name, datatype to datatype)
+        return mapOf("name" to name, "datatype" to datatype)
     }
     abstract fun asJson():JSONObject
+
+    protected fun mergeCommonInnerPropertiesWithOutputJSON(outputJson:JSONObject):JSONObject{
+        outputJson.put("sideActionsActive", sideActionsAcive)
+        return outputJson
+    }
     protected fun actionsToJson():JSONArray{
         var out = JSONArray()
         actions?.let {
@@ -46,73 +61,48 @@ open abstract class View(
         }
         return out
     }
-    companion object {
-        public val namesToClasses = hashMapOf<String, Any>(
-                "text" to TextView::class,
-                        "media" to MediaView::class
-        )
-        fun asJson(view:View){
 
-        }
-        public fun FromJson(j:JSONObject){
-            /*
-            format:
-            {
-            "name":"anem",
-            "datatype":"datatype",
-            "data":{
-                "major":"minor" etc
-
-            }
-
-             */
-            //TODO: WYJEBAC KLASY ZOSTAWIC FABRYKI OBIEKTÓW JSONA XDDD baka da yo
-            (namesToClasses["text"] as KClass<Any>)!!.java.fields[0].name //TODO: przerobić wszystkie toJSON na refleksję xdd
-        }
-        public fun FromJson(s:String){
-            FromJson(JSONObject(s))
-        }
-    }
 }
 class CustomView(
         name:String,
-        var template:String
-):View(name,"custom"){
+        template:JSONObject,
+        onBack: (Context, String) -> Unit
+
+):View(name,"custom", onBack = onBack,template = template!!){
+
+
     override fun asJson():JSONObject {
         val parent = JSONObject(getBasicPropertiesAsMap())
-        parent.put("data",JSONObject(template))
+        var templateMerged = mergeCommonInnerPropertiesWithOutputJSON(template!!)
+        parent.put("data", template)
         return parent
     }
 
-    fun retreiveActions(): List<Action>? {
-        var actions: MutableList<JSONObject>? = JSONObject(template).getByAttribute("type", "action")
-        val ret = mutableListOf<Action>()
-        actions?.let {
 
-            for (action in actions) {
-                ret.add(Action({},action.getString("callback"),action.getString("name"),action.getString("extras")))
-            }
-        }
-        return ret
-    }
+
 }
 class ImageView(
         name:String,
-        var imageUri:Uri,
+        var imageUri:Uri= Uri.EMPTY,
         var flickable:Boolean=false,
-        actions: MutableList<Action>
-):View(name,"image",actions){
+
+        actions: MutableList<Action> = mutableListOf(),
+        onBack:(Context, String)->Unit,
+        template: JSONObject?=null
+):View(name,"image",actions, onBack =onBack,template = template){
     override fun asJson():JSONObject {
         val parent = JSONObject(getBasicPropertiesAsMap())
-        val innerData = JSONObject()
+        var innerData = JSONObject()
 
         with(innerData){
             put("imageUri",imageUri.toString())
             put("flickable",flickable)
         }
+        innerData= mergeCommonInnerPropertiesWithOutputJSON(innerData)
         parent.put("data",innerData)
         return parent
     }
+
 }
 class MediaView(
         name:String,
@@ -121,13 +111,15 @@ class MediaView(
         var artist:String,
         var album:String,
         var extra:String,
-        actions:MutableList<Action> = mutableListOf()
-):View(name,"media",actions){
+        actions:MutableList<Action> = mutableListOf(),
+        template: JSONObject?=null,
+        onBack:(Context, String)->Unit ={c,s->}
+):View(name,"media",actions, onBack =onBack, template = template){
     var blurImage:Boolean=true
 
     override fun asJson():JSONObject {
         val parent = JSONObject(getBasicPropertiesAsMap())
-        val innerData = JSONObject()
+        var innerData = JSONObject()
 
         with(innerData){
             put("imageUri",imageUri.toString())
@@ -137,40 +129,95 @@ class MediaView(
             put("extra",extra)
             put("actions",actionsToJson())
         }
+        innerData = mergeCommonInnerPropertiesWithOutputJSON(innerData)
         parent.put("data",innerData)
         return parent
     }
+
 }
 class TextView(
 
         name:String,
         var major:String,
         var minor:String,
+
+
         actions:MutableList<Action> = mutableListOf(),
-        var style:Layouts = Layouts.NOTIFICATION_STYLE
-):View(name,"text",actions){
+        var imageUri: Uri?=null,
+        var progress:Double?=null,
+        var style:Layouts = Layouts.NOTIFICATION_STYLE,
+        template: JSONObject?=null,
+                onBack:(Context, String)->Unit ={c,s->}
+
+):View(name,"text",actions, onBack = onBack,template = template){
     companion object {
+
         enum class Layouts{
             NOTIFICATION_STYLE,
-            TEXT_WALL_STYLE
+            TEXT_WALL_STYLE,
+            TO_BOTTOM,
+            TO_TOP,
+            CENTER
 
         }
+
     }
     override fun asJson():JSONObject {
         val parent = JSONObject(getBasicPropertiesAsMap())
-        val innerData = JSONObject()
 
-        with(innerData){
-            put("major",major)
+
+        with(parent){
+            put("significant",major)
             put("minor",minor)
+            imageUri?.let{
+                put("imageUri", imageUri.toString())
+            }
+            progress?.let {
+                put("progress",it)
+            }
+            template?.let{
+                put("template", it)
+            }
             put("style", style.toString())
             put("actions",actionsToJson())
         }
-        parent.put("data",innerData)
+
         return parent
     }
 
 }
+class ListView(
+
+        name:String,
+        val elements:MutableList<ListElement>? =null,
+        template:JSONObject? = null,
+        val simpleElements:MutableList<String>? =null,
+        var clickable:Boolean=false,
+        var onClick:(Context, Int, String)->Unit = {context, i:Int, s:String->},
+        onBack:(Context, String)->Unit = {c,s->}
+):View(name,"list", onBack = onBack,template = template){
+
+    override fun asJson():JSONObject {
+
+        var parent = JSONObject(getBasicPropertiesAsMap())
+        simpleElements?.let {
+            parent.put("listData", simpleElements.toJsonWATCH())
+            parent = mergeCommonInnerPropertiesWithOutputJSON(parent)
+        }
+        template?.let {
+            parent.put("listTemplate", template)
+        }
+
+
+        return parent
+    }
+
+}
+
+
+
+
+/*
 class MessageView(
         name:String,
         actions:MutableList<Action> = mutableListOf()
@@ -186,4 +233,4 @@ class GPSView(
     override fun asJson():JSONObject {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
-}
+}*/

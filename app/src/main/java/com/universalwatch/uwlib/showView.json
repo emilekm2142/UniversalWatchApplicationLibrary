@@ -1,0 +1,16 @@
+{
+   "type":"view",
+   "targetPackage":"io.universalwatch.universalwatchapplication",
+   "application":"Official Notes",
+   "data":{
+      "name":"notesList",
+      "datatype":"list",
+      "data":{
+         "list":[
+
+         ],
+         "sideActionsActive":false
+      },
+      "forceShow":false
+   }
+}

@@ -4,6 +4,7 @@ import android.app.Notification
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.Intent.FLAG_RECEIVER_FOREGROUND
 import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
@@ -15,27 +16,20 @@ import kotlinx.coroutines.experimental.runBlocking
 import org.json.JSONObject
 import java.util.*
 import java.util.concurrent.TimeUnit
+import android.content.pm.PackageManager
+import android.os.Debug
+import org.json.JSONArray
+
+
 
 /**
  * Created by emile on 14-Nov-17.
  */
 
-/*
-Convention: Functions there send only an inner body, without an outer parent
-not:{
-type:"view"
-data:{SomeData}
-}
-but just {someData}
-add any extra values to a seperate field in extras
 
-example of getting the response ->
-val ret = async { somthingThatReturnsResponse() }
 
- */
-
-private var BROADCAST_ACTION_NAME = "UniversalWatch.SendData"
-private var ACTION_NAME_ADDITION = ".UniversalWatch"
+private val BROADCAST_ACTION_NAME = "UniversalWatch.SendData"
+private val ACTION_NAME_ADDITION = ".UniversalWatch"
 
 private val RETURN_BROADCAST_NAME = ".UniversalWatch.Return"
 open class Application(
@@ -44,6 +38,7 @@ open class Application(
         var requirements: List<Requirements>,
         var icon:Uri = Uri.EMPTY
 ){
+
     private var appPackageName:String
     private var receiverActionName:String
     lateinit var initialView:View
@@ -52,28 +47,29 @@ open class Application(
     var usesVoice =false
     var voicePhrases = mutableListOf<String>()
     var views:MutableList<View> = mutableListOf()
-
+    lateinit var currentView:View
     open var onOpen: (Context, JSONObject) -> Unit = {context, jsonObject -> this.showView(context, initialView) }
     open var onAction: (Context, JSONObject)->Unit= {context, jsonObject ->
         val callbackName = jsonObject!!.getString("callbackName")
-        executeAction(callbackName)}
-    open var onClose: (Context,JSONObject)->Unit = {context, jsonObject -> close() }
+        val extras = jsonObject!!.getJSONObject("callbackName")
+        executeAction(callbackName,extras)}
+    open var onListClick:(context:Context, Int, String) -> Unit= {context, id, jsonObject -> Log.d("aa","nothing changed!") }
+    open var onClose: (Context,JSONObject)->Unit = {context, jsonObject -> close(context) }
 
     init {
 
         appPackageName = context.packageName
-        receiverActionName = appPackageName + ACTION_NAME_ADDITION
+        receiverActionName = appPackageName + ACTION_NAME_ADDITION+"."+friendlyName.replace(' ','_')
         startReceivers(context)
+        //install(context,false,false)
     }
         //configurin a actionsReceiver
 
     private fun startReceivers(context: Context){
-       // actionsReceiver = ActionsReceiver()
-       // val i = IntentFilter(receiverActionName)
-       // context.registerReceiver(actionsReceiver,i)
+
 
         returnReceiver = ReturnReceiver()
-        val i2 = IntentFilter(  appPackageName +RETURN_BROADCAST_NAME)
+        val i2 = IntentFilter(  appPackageName +RETURN_BROADCAST_NAME +"."+friendlyName.replace(' ','_'))
         context.registerReceiver(returnReceiver,i2)
 
     }
@@ -83,8 +79,9 @@ open class Application(
         i.putExtra("sourceApp",friendlyName)
         i.putExtra("type",type.name)
         i.putExtra("data",inString)
+        i.setFlags(FLAG_RECEIVER_FOREGROUND)
         i.extras.putAll(extras)
-        i.setPackage("io.universalwatch.universalwatchapplication") //make sure only the app receives!
+        i.setPackage(getInstalledPackage(context)) //make sure only the app receives!
         context.sendBroadcast(i)
 
         if (shouldReturn) {
@@ -94,7 +91,7 @@ open class Application(
             return null
         }
     }
-    suspend fun getLastResponse(timeout:Long=3000):String?{
+    suspend fun getLastResponse(timeout:Long=10000):String?{
         //block
         var returnNothing = false
         Timer().schedule(object : TimerTask() {
@@ -108,23 +105,21 @@ open class Application(
         returnReceiver!!.last=null
         return d
     }
-    fun updateView(viewName:String, properties: HashMap<String,String>){
-
+    fun updateView(context:Context, viewName: String, tree:JSONObject){
+        tree.put("name", viewName)
+        sendJSONObject(tree,BroadcastTypes.VIEW_UPDATE, context)
     }
-    fun executeAction(callbackName:String) {
 
-
-        //TODO: Replace with something more idiomatic
-        //JEBAC xd
-        //search through all the action and invoke its callback when name matches
+    fun executeAction(callbackName:String, extras: JSONObject) {
         var found = false
         for ((action,callback) in actualActions) {
             if (action.callback == callbackName) {
-                action.callbackFunction(action.extras) //lambda
+                action.callbackFunction(IncomingExtras(extras)) //lambda
                 found=true
             }
         }
         if (!found){
+            Log.d("aa", callbackName)
             Log.d("aa","not found")
         }
     }
@@ -132,9 +127,14 @@ open class Application(
         val inJson = newView.asJson()
         val extras= Bundle()
         extras.putString("viewName",viewName)
+        currentView=newView
         return sendJSONObject(inJson,BroadcastTypes.VIEW_SHOW,context,extras, shouldReturn=shouldReturn)
     }
     fun install(context: Context, forceReinstall:Boolean=false, shouldReturn: Boolean=false):String?{
+        //requirements to strings
+        val reqsJsonArray = JSONArray( requirements.map { it.toString() })
+        val voicePhrasesJsonArray = JSONArray(voicePhrases)
+
         var inner = hashMapOf(
                 "package" to appPackageName,
                 "reintall" to forceReinstall,
@@ -142,24 +142,42 @@ open class Application(
                 "package" to appPackageName,
                 "icon" to icon.toString(),
                 "usesEncryption" to false,
-                "voicePhrases" to voicePhrases,
-                "requirements" to requirements
+                "voicePhrases" to voicePhrasesJsonArray
         )
         var a=JSONObject(inner)
+        a.put("requirements",reqsJsonArray)
         return sendJSONObject(a, BroadcastTypes.APPLICATION_INSTALL, context,shouldReturn = shouldReturn)
     }
-    fun showView(context:Context, view:View,shouldReturn: Boolean=false):String?{
+    fun showView(context:Context, view:View,shouldReturn: Boolean=false, forceShow:Boolean=false):String?{
+        if (view is ListView){
+            onListClick = view.onClick
+        }
         val inJson = view.asJson()
+        currentView=view
+        inJson.put("forceShow",forceShow)
+        removeActions()
+        bindActions(view.actions)
         return sendJSONObject(inJson,BroadcastTypes.VIEW_SHOW,context,shouldReturn = shouldReturn)
     }
     fun sendNotification(context:Context, notification:Notification){
 
     }
-    fun close(){
+    fun close(context: Context){
         actualActions.clear()
+        val data = JSONObject("""
+            {"package":"${context.packageName}",
+            "friendlyName":"${friendlyName}"
+            }
+        """.trimIndent())
+        sendJSONObject(data,BroadcastTypes.APPLICATION_CLOSE,context)
     }
     fun bindAction(a:Action){
         actualActions.put(a,{a.callbackFunction})
+    }
+    fun bindActions(actions:MutableList<Action>){
+        for (action in actions){
+            bindAction(action)
+        }
     }
     fun removeActions(){
        actualActions.clear()
@@ -170,29 +188,5 @@ open class Application(
             last=p1!!.getStringExtra("data")
         }
     }
-    inner class ActionsReceiver:BroadcastReceiver(){
 
-        var initialized=false
-        fun initialize(){
-
-            initialized=true
-        }
-        override fun onReceive(p0: Context?, p1: Intent?) {
-            val callbackName = p1!!.getStringExtra("callbackName")
-
-            //TODO: Replace with something more idiomatic
-            //JEBAC xd
-            //search through all the action and invoke its callback when name matches
-            var found = false
-            for ((action,callback) in actualActions) {
-                if (action.callback == callbackName) {
-                    action.callbackFunction(action.extras) //lambda
-                    found=true
-                }
-            }
-            if (!found){
-                Log.d("aa","not found")
-            }
-        }
-    }
 }

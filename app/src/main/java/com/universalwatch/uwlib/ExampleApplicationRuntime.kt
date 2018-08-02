@@ -4,38 +4,49 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Debug
+import android.util.Log
 
 /**
  * Created by emile on 29.01.2018.
  */
-
+/*
+object static{
+    lateinit var app:Application
+    var wasInit = false
+}
 
 class ExampleApplicationRuntime:ApplicationRuntime(){
 
     override fun makeApplication(context: Context): Application {
         //return application
-       val a= Application(context, "notes app", listOf(Requirements.images, Requirements.color))
+        val wasInit  = static.wasInit
+        if (!static.wasInit) {
+            static.app = Application(context, "notes app", listOf(Requirements.images, Requirements.color))
 
-        val actions = mutableListOf<Action>(
-                Action(
-                        callbackFunction = {s: String ->
-                            //some useful code here...
-                            val b= s
-                        },
-                        callback = "action1",
-                        name = "label1",
-                        extras = "label1 extras"
-                )
-        )
-        val v:TextView = TextView(
-                name="main",
-                major = "typieee",
-                minor = "to twoja ostatnia szansa",
-                actions = actions
-        )
-        a.initialView=v;
+            val actions = mutableListOf<Action>(
+                    Action(
+                            callbackFunction = { s: String ->
+                                //some useful code here...
+                                val b = s
+                            },
+                            callback = "action1",
+                            name = "label1",
+                            extras = "label1 extras"
+                    )
+            )
+            val v: TextView = TextView(
+                    name = "main",
+                    major = "typieee",
+                    minor = "to twoja ostatnia szansa",
+                    actions = actions, onBack = {}
+            )
 
-        return a;
+
+            static.app.initialView = v;
+            static.wasInit = true
+        }
+        return static.app;
     }
 
 
@@ -65,3 +76,4 @@ class MusicReceiver:BroadcastReceiver(){
         //resend to main app
     }
 }
+        */
