@@ -21,118 +21,121 @@ import android.os.Debug
 import org.json.JSONArray
 
 
-
 /**
  * Created by emile on 14-Nov-17.
  */
-
 
 
 private val BROADCAST_ACTION_NAME = "UniversalWatch.SendData"
 private val ACTION_NAME_ADDITION = ".UniversalWatch"
 
 private val RETURN_BROADCAST_NAME = ".UniversalWatch.Return"
+
 open class Application(
         context: Context,
-        var friendlyName:String,
+        var friendlyName: String,
         var requirements: List<Requirements>,
-        var icon:Uri = Uri.EMPTY
-){
+        var icon: Uri = Uri.EMPTY
+) {
 
-    private var appPackageName:String
-    private var receiverActionName:String
-    lateinit var initialView:View
-    lateinit private var returnReceiver:ReturnReceiver
-    var actualActions:HashMap<Action,()->Unit> = hashMapOf()
-    var usesVoice =false
+    private var appPackageName: String
+    private var receiverActionName: String
+    lateinit var initialView: View
+    lateinit private var returnReceiver: ReturnReceiver
+    var actualActions: HashMap<Action, () -> Unit> = hashMapOf()
+    var usesVoice = false
     var voicePhrases = mutableListOf<String>()
-    var views:MutableList<View> = mutableListOf()
-    lateinit var currentView:View
-    open var onOpen: (Context, JSONObject) -> Unit = {context, jsonObject -> this.showView(context, initialView) }
-    open var onAction: (Context, JSONObject)->Unit= {context, jsonObject ->
+    var views: MutableList<View> = mutableListOf()
+    lateinit var currentView: View
+    open var onOpen: (Context, JSONObject) -> Unit = { context, jsonObject -> this.showView(context, initialView) }
+    open var onAction: (Context, JSONObject) -> Unit = { context, jsonObject ->
         val callbackName = jsonObject!!.getString("callbackName")
-        val extras = jsonObject!!.getJSONObject("callbackName")
-        executeAction(callbackName,extras)}
-    open var onListClick:(context:Context, Int, String) -> Unit= {context, id, jsonObject -> Log.d("aa","nothing changed!") }
-    open var onClose: (Context,JSONObject)->Unit = {context, jsonObject -> close(context) }
+        val extras = jsonObject!!.getJSONObject("extras")
+        executeAction(callbackName, extras)
+    }
+    open var onListClick: (context: Context, Int, String) -> Unit = { context, id, jsonObject -> Log.d("aa", "nothing changed!") }
+    open var onClose: (Context, JSONObject) -> Unit = { context, jsonObject -> close(context) }
 
     init {
 
         appPackageName = context.packageName
-        receiverActionName = appPackageName + ACTION_NAME_ADDITION+"."+friendlyName.replace(' ','_')
+        receiverActionName = appPackageName + ACTION_NAME_ADDITION + "." + friendlyName.replace(' ', '_')
         startReceivers(context)
         //install(context,false,false)
     }
-        //configurin a actionsReceiver
+    //configurin a actionsReceiver
 
-    private fun startReceivers(context: Context){
+    private fun startReceivers(context: Context) {
 
 
         returnReceiver = ReturnReceiver()
-        val i2 = IntentFilter(  appPackageName +RETURN_BROADCAST_NAME +"."+friendlyName.replace(' ','_'))
-        context.registerReceiver(returnReceiver,i2)
+        val i2 = IntentFilter(appPackageName + RETURN_BROADCAST_NAME + "." + friendlyName.replace(' ', '_'))
+        context.registerReceiver(returnReceiver, i2)
 
     }
-     private fun sendJSONObject(j:JSONObject,type:BroadcastTypes,context: Context,extras:Bundle=Bundle(), shouldReturn:Boolean=false):String?{
+
+    private fun sendJSONObject(j: JSONObject, type: BroadcastTypes, context: Context, extras: Bundle = Bundle(), shouldReturn: Boolean = false): String? {
         var i = Intent(BROADCAST_ACTION_NAME)
-        val inString  = j.toString()
-        i.putExtra("sourceApp",friendlyName)
-        i.putExtra("type",type.name)
-        i.putExtra("data",inString)
+        val inString = j.toString()
+        i.putExtra("sourceApp", friendlyName)
+        i.putExtra("type", type.name)
+        i.putExtra("data", inString)
         i.setFlags(FLAG_RECEIVER_FOREGROUND)
         i.extras.putAll(extras)
         i.setPackage(getInstalledPackage(context)) //make sure only the app receives!
         context.sendBroadcast(i)
 
         if (shouldReturn) {
-            return runBlocking {  getLastResponse() }
-        }
-        else{
+            return runBlocking { getLastResponse() }
+        } else {
             return null
         }
     }
-    suspend fun getLastResponse(timeout:Long=10000):String?{
+
+    suspend fun getLastResponse(timeout: Long = 10000): String? {
         //block
         var returnNothing = false
         Timer().schedule(object : TimerTask() {
-           override fun run() {
-                returnNothing=true // this code will be executed after 2 seconds
+            override fun run() {
+                returnNothing = true // this code will be executed after 2 seconds
             }
         }, timeout)
-        while (returnReceiver!!.last == null && !returnNothing){
-            delay(50, TimeUnit.MILLISECONDS)}
+        while (returnReceiver!!.last == null && !returnNothing) {
+            delay(50, TimeUnit.MILLISECONDS)
+        }
         val d = returnReceiver!!.last
-        returnReceiver!!.last=null
+        returnReceiver!!.last = null
         return d
     }
-    fun updateView(context:Context, viewName: String, tree:JSONObject){
-        tree.put("name", viewName)
-        sendJSONObject(tree,BroadcastTypes.VIEW_UPDATE, context)
+
+    fun updateView(context: Context, view:View) {
+        showView(context, view,false,false,true)
     }
 
-    fun executeAction(callbackName:String, extras: JSONObject) {
-        var found = false
-        for ((action,callback) in actualActions) {
+    fun executeAction(callbackName: String, extras: JSONObject) {
+        var found:Action?=null
+        for ((action, callback) in actualActions) {
             if (action.callback == callbackName) {
-                action.callbackFunction(IncomingExtras(extras)) //lambda
-                found=true
+                found=action
+                break
             }
         }
-        if (!found){
-            Log.d("aa", callbackName)
-            Log.d("aa","not found")
+        found?.let{
+            it.callbackFunction(IncomingExtras(extras)) //lambda
         }
     }
-    fun replaceView(context: Context, viewName:String,newView:View, shouldReturn: Boolean=false):String?{
+
+    fun replaceView(context: Context, viewName: String, newView: View, shouldReturn: Boolean = false): String? {
         val inJson = newView.asJson()
-        val extras= Bundle()
-        extras.putString("viewName",viewName)
-        currentView=newView
-        return sendJSONObject(inJson,BroadcastTypes.VIEW_SHOW,context,extras, shouldReturn=shouldReturn)
+        val extras = Bundle()
+        extras.putString("viewName", viewName)
+        currentView = newView
+        return sendJSONObject(inJson, BroadcastTypes.VIEW_SHOW, context, extras, shouldReturn = shouldReturn)
     }
-    fun install(context: Context, forceReinstall:Boolean=false, shouldReturn: Boolean=false):String?{
+
+    fun install(context: Context, forceReinstall: Boolean = false, shouldReturn: Boolean = false): String? {
         //requirements to strings
-        val reqsJsonArray = JSONArray( requirements.map { it.toString() })
+        val reqsJsonArray = JSONArray(requirements.map { it.toString() })
         val voicePhrasesJsonArray = JSONArray(voicePhrases)
 
         var inner = hashMapOf(
@@ -144,48 +147,71 @@ open class Application(
                 "usesEncryption" to false,
                 "voicePhrases" to voicePhrasesJsonArray
         )
-        var a=JSONObject(inner)
-        a.put("requirements",reqsJsonArray)
-        return sendJSONObject(a, BroadcastTypes.APPLICATION_INSTALL, context,shouldReturn = shouldReturn)
+        var a = JSONObject(inner)
+        a.put("requirements", reqsJsonArray)
+        return sendJSONObject(a, BroadcastTypes.APPLICATION_INSTALL, context, shouldReturn = shouldReturn)
     }
-    fun showView(context:Context, view:View,shouldReturn: Boolean=false, forceShow:Boolean=false):String?{
-        if (view is ListView){
-            onListClick = view.onClick
-        }
+
+    fun showView(context: Context, view: View, shouldReturn: Boolean = false, forceShow: Boolean = false, update:Boolean=false): String? {
+
         val inJson = view.asJson()
-        currentView=view
-        inJson.put("forceShow",forceShow)
+        currentView = view
+        inJson.put("forceShow", forceShow)
         removeActions()
-        bindActions(view.actions)
-        return sendJSONObject(inJson,BroadcastTypes.VIEW_SHOW,context,shouldReturn = shouldReturn)
+        bindActions(view)
+        return sendJSONObject(inJson, if (!update) BroadcastTypes.VIEW_SHOW else BroadcastTypes.VIEW_UPDATE, context, shouldReturn = shouldReturn)
     }
-    fun sendNotification(context:Context, notification:Notification){
+
+    fun sendNotification(context: Context, notification: Notification) {
 
     }
-    fun close(context: Context){
+
+    fun close(context: Context) {
         actualActions.clear()
         val data = JSONObject("""
             {"package":"${context.packageName}",
             "friendlyName":"${friendlyName}"
             }
         """.trimIndent())
-        sendJSONObject(data,BroadcastTypes.APPLICATION_CLOSE,context)
+        sendJSONObject(data, BroadcastTypes.APPLICATION_CLOSE, context)
     }
-    fun bindAction(a:Action){
-        actualActions.put(a,{a.callbackFunction})
+
+    fun bindAction(a: Action) {
+        actualActions.put(a, { a.callbackFunction })
     }
-    fun bindActions(actions:MutableList<Action>){
-        for (action in actions){
-            bindAction(action)
+
+    fun bindActions(view: View) {
+        when (view){
+            is TextView -> {
+                for (action in view.actions) {
+                    bindAction(action)
+                }
+            }
+            is ListView ->{
+                for (entry in view.elements){
+                    entry.mainAction?.let{
+                        bindAction(it)
+                    }
+                    entry.secondaryActions?.let {
+                        for (action in it){
+                            bindAction(action)
+                        }
+                    }
+                }
+            }
         }
+
+
     }
-    fun removeActions(){
-       actualActions.clear()
+
+    fun removeActions() {
+        actualActions.clear()
     }
-    inner class ReturnReceiver:BroadcastReceiver(){
-        var last:String?=null;
+
+    inner class ReturnReceiver : BroadcastReceiver() {
+        var last: String? = null;
         override fun onReceive(p0: Context?, p1: Intent?) {
-            last=p1!!.getStringExtra("data")
+            last = p1!!.getStringExtra("data")
         }
     }
 

@@ -31,7 +31,7 @@ abstract class View(
         private var datatype:String,
 
         var actions:MutableList<Action> = mutableListOf(),
-        onBack: (Context, String) -> Unit,
+        onBack: (Context, String) -> Unit = {a,b->},
         var template:JSONObject?=null
 ){
     lateinit var systemCallbacks:SystemActions
@@ -81,13 +81,36 @@ class CustomView(
 
 
 }
+class MessagingView(name: String, var profiles:List<MessagingProfile>, var messages:List<MessagingMessage>,  actions: MutableList<Action> = mutableListOf(),
+                    onBack:(Context, String)->Unit={c,s->}):View(name,"messaging",actions, onBack =onBack){
+    override fun asJson(): JSONObject {
+        val parent = JSONObject(getBasicPropertiesAsMap())
+        var innerData = JSONObject()
+        with (innerData){
+            val profilesJSON = JSONArray()
+            for (profile in profiles){
+                profilesJSON.put(profile.toJSON())
+            }
+            val messagesJSON = JSONArray()
+            for (message in messages){
+                messagesJSON.put(message.toJSON())
+            }
+            put("actions", actionsToJson())
+            put("profiles", profilesJSON)
+            put("messages", messagesJSON)
+        }
+        innerData= mergeCommonInnerPropertiesWithOutputJSON(innerData)
+        parent.put("data",innerData)
+        return parent
+    }
+}
 class ImageView(
         name:String,
         var imageUri:Uri= Uri.EMPTY,
         var flickable:Boolean=false,
 
         actions: MutableList<Action> = mutableListOf(),
-        onBack:(Context, String)->Unit,
+        onBack:(Context, String)->Unit={c,s->},
         template: JSONObject?=null
 ):View(name,"image",actions, onBack =onBack,template = template){
     override fun asJson():JSONObject {
@@ -145,7 +168,7 @@ class TextView(
         actions:MutableList<Action> = mutableListOf(),
         var imageUri: Uri?=null,
         var progress:Double?=null,
-        var style:Layouts = Layouts.NOTIFICATION_STYLE,
+        var style:Layouts = Layouts.Notification,
         template: JSONObject?=null,
                 onBack:(Context, String)->Unit ={c,s->}
 
@@ -153,11 +176,11 @@ class TextView(
     companion object {
 
         enum class Layouts{
-            NOTIFICATION_STYLE,
-            TEXT_WALL_STYLE,
-            TO_BOTTOM,
-            TO_TOP,
-            CENTER
+            Notification,
+            TextWall,
+            Center,
+            ToBottom,
+            ToTop
 
         }
 
@@ -189,26 +212,20 @@ class TextView(
 class ListView(
 
         name:String,
-        val elements:MutableList<ListElement>? =null,
-        template:JSONObject? = null,
-        val simpleElements:MutableList<String>? =null,
+        var elements:MutableList<ListEntry>,
         var clickable:Boolean=false,
-        var onClick:(Context, Int, String)->Unit = {context, i:Int, s:String->},
         onBack:(Context, String)->Unit = {c,s->}
-):View(name,"list", onBack = onBack,template = template){
+):View(name,"list", onBack = onBack){
 
     override fun asJson():JSONObject {
 
         var parent = JSONObject(getBasicPropertiesAsMap())
-        simpleElements?.let {
-            parent.put("listData", simpleElements.toJsonWATCH())
-            parent = mergeCommonInnerPropertiesWithOutputJSON(parent)
+        val serializedElements = JSONArray()
+        for (e in elements){
+            serializedElements.put(e.toJSON())
         }
-        template?.let {
-            parent.put("listTemplate", template)
-        }
-
-
+        parent.put("simpleEntries", serializedElements)
+        parent = mergeCommonInnerPropertiesWithOutputJSON(parent)
         return parent
     }
 

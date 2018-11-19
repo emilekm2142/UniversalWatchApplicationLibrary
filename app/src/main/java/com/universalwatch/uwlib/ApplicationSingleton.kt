@@ -5,7 +5,7 @@ import android.util.Log
 
 abstract class ApplicationSingleton(){
     protected var wasInitialized=false
-    var app: Application?=null
+    private var app: Application?=null
     fun forceRecreation(context: Context){
         wasInitialized=false
         __createApplication(context)
@@ -21,10 +21,10 @@ abstract class ApplicationSingleton(){
     }
     private fun __createApplication(context: Context)=creation{
         if (isWatchAvailable(context))
-            createApplication(context)
+            this.app = createApplication(context)
     }
-    open fun createApplication(context: Context){
-
+    open fun createApplication(context: Context):Application?{
+        return null
     }
     fun getApplication(context: Context):Application{
         if (wasInitialized) {

@@ -12,9 +12,6 @@ import kotlinx.coroutines.experimental.launch
 private val allowedReceiverPackages = mutableListOf<String>(
         "io.universalwatch.universalwatchapplication"
 )
-fun updateAppList(){
-    allowedReceiverPackages.add("new.package")
-}
 fun isWatchAvailable(context: Context):Boolean{
     return getInstalledPackage(context) != null
 }

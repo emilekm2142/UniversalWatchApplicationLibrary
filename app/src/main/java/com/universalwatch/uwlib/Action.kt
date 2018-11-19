@@ -30,23 +30,16 @@ class Action(
         out.put("name",name)
         out.put("type","action")
         out.put("callback",callback)
-        out.put("extras",extras.extras?:extras.getArray())
+        out.put("extras",extras.toJson())
         return out
     }
 }
 class Extras(var extras: String? = null){
-    private val json:JSONArray = JSONArray()
-    fun addInput(id:String):Extras{
-        json.put(JSONObject("""{type:"input", "name":"${id}"}"""))
-        return this
+    private var json:JSONObject?=null
+    init {
+        json = JSONObject(extras)
     }
-
-    fun finalize():Extras{
-        return this
-    }
-     fun getArray():JSONArray{
-        return json
-    }
+    fun toJson():JSONObject{return json!!}
 
 }
 class IncomingExtras(var extras: JSONObject){

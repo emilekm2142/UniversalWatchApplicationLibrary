@@ -70,7 +70,7 @@ object WatchUtils {
             return false
         }
     }
-    suspend fun getPublicUri(context:Context, name:String):Uri{
+    fun getPublicUri(context:Context, name:String):Uri{
         if (name.startsWith("http")){
 
         }

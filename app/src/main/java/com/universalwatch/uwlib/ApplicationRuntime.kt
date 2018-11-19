@@ -67,19 +67,19 @@ open class ApplicationRuntime :BroadcastReceiver() {
             BroadcastTypes.SYSTEM_ACTION-> {
                 val data = JSONObject(p1!!.getStringExtra("data"))
                 val actionType = data.getString("actionName")
-                val screenName = data.getString("screen")
+                //val screenName = data.getString("screen")
                 Log.d("t", actionType)
                 //TODO: This will NOT work if the state is not saved. --PRIORITY CHECK
                 //as for now, it works. Process is not killed by the system.
                 when (actionType) {
                     "next" -> {
-                        app.currentView.systemCallbacks.onNext(context,screenName)
+                       // app.currentView.systemCallbacks.onNext(context,screenName)
                     }
                     "previous" -> {
-                        app.currentView.systemCallbacks.onPrev(context,screenName)
+                     //   app.currentView.systemCallbacks.onPrev(context,screenName)
                     }
                     "back" -> {
-                        app.currentView.systemCallbacks.onBack(context,screenName)
+                        app.currentView.systemCallbacks.onBack(context,"")//screenName)
                     }
                 }
             }
